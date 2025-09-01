@@ -1,38 +1,38 @@
-name: Persistent Server
- 
+name: Continuous Persistent VPS
+
 on:
   schedule:
     - cron: '0 */6 * * *'  # Every 6 hours
   workflow_dispatch:
- 
+
 jobs:
   vps-session:
     runs-on: ubuntu-latest
-    timeout-minutes: 4  # Just under 6 hours
- 
+    timeout-minutes: 350  # Just under 6 hours
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
- 
-      - name: Set hostname to neonhost
-        run: sudo hostnamectl set-hostname neonhost
- 
+
+      - name: Set hostname to toknless
+        run: sudo hostnamectl set-hostname toknless
+
       - name: Download VPS backup (if any)
         uses: actions/download-artifact@v4
         with:
           name: vps-backup
           path: ./backup
         continue-on-error: true
- 
+
       - name: Install prerequisites
         run: |
           sudo apt update
-          sudo apt install -y tmate curl unzip sudo net-tools neofetch
- 
+          sudo apt install -y curl unzip sudo net-tools neofetch
+
       - name: Install Tailscale official script
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
- 
+
       - name: Restore backup files
         run: |
           if [ -f ./backup/backup.zip ]; then
@@ -40,7 +40,7 @@ jobs:
           else
             echo "No backup found, starting fresh"
           fi
- 
+
       - name: Restore Tailscale state
         run: |
           if [ -f /opt/vps-backup/data/tailscaled.state ]; then
@@ -48,43 +48,43 @@ jobs:
             sudo cp /opt/vps-backup/data/tailscaled.state /var/lib/tailscale/tailscaled.state
             sudo chmod 600 /var/lib/tailscale/tailscaled.state
           fi
- 
+          
       - name: Start Tailscale
         run: |
           sudo tailscaled &
           sleep 8
-          sudo tailscale up --authkey ${{ secrets.TAILSCALE_AUTHKEY }} --hostname=neonhost || echo "Tailscale already up"
- 
-      - name: Create user neonhost with sudo
+          sudo tailscale up --authkey ${{ secrets.TAILSCALE_AUTHKEY }} --hostname=toknless || echo "Tailscale already up"
+
+      - name: Create user toknless with sudo
         run: |
-          if ! id -u neonhost >/dev/null 2>&1; then
-            sudo useradd -m -s /bin/bash neonhost
-            echo "neonhost:neonhost" | sudo chpasswd
-            sudo usermod -aG sudo neonhost
-            echo "neonhost ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/neonhost
+          if ! id -u toknless >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash toknless
+            echo "toknless:toknless" | sudo chpasswd
+            sudo usermod -aG sudo toknless
+            echo "toknless ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/toknless
           fi
- 
-      - name: Start tmate session for SSH access
-        uses: mxschmitt/action-tmate@v3
- 
-      - name: Show Tailscale IP and tmate info
+
+      - name: Show Tailscale IP
         run: |
           echo "🔗 Tailscale IP:"
           tailscale ip -4 || echo "Tailscale IP not found"
-          echo ""
-          echo "🔑 tmate SSH session:"
-          cat $HOME/.tmate.sock/ssh
- 
+
       - name: Sleep to keep VPS alive
-        run: sleep 240  # 6 hours
- 
-      - name: Backup VPS data and tailscale state
+        run: sleep 21600  # 6 hours
+
+      - name: Backup VPS data
         run: |
           sudo mkdir -p /opt/vps-backup/data
+          # Backup Pterodactyl data
+          sudo cp -r /var/www/pterodactyl /opt/vps-backup/data/
+          sudo cp -r /etc/pterodactyl/wings /opt/vps-backup/data/
+          # Backup Tailscale state
           sudo cp /var/lib/tailscale/tailscaled.state /opt/vps-backup/data/
+          
+          # Change ownership for zipping
           sudo chown -R $USER:$USER /opt/vps-backup
           zip -r backup.zip /opt/vps-backup
- 
+
       - name: Upload VPS backup artifact
         uses: actions/upload-artifact@v4
         with:
